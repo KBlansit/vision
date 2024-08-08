@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn.functional as F
 import torchvision
-from torch import nn, Tensor
+from torch import _assert, nn, Tensor, unique
 from torchvision.ops import boxes as box_ops, roi_align
 
 from . import _utils as det_utils
@@ -98,9 +98,16 @@ def maskrcnn_loss(mask_logits, proposals, gt_masks, gt_labels, mask_matched_idxs
     # type: (Tensor, List[Tensor], List[Tensor], List[Tensor], List[Tensor]) -> Tensor
     """
     Args:
+        mask_logits (Tensor):
+            Mask logits.
         proposals (list[BoxList])
-        mask_logits (Tensor)
-        targets (list[BoxList])
+            List of proposal masks.
+        gt_masks (list[Tensor])
+            List of ground truth binary masks.
+        gt_targets (list[Tensor])
+            List of ground truth labels.
+        mask_matched_idxs (list[Tensor])
+            Indicies that match the mask label.
 
     Return:
         mask_loss (Tensor): scalar tensor containing the loss
@@ -813,6 +820,9 @@ class RoIHeads(nn.Module):
                     raise ValueError("targets, pos_matched_idxs, mask_logits cannot be None when training")
 
                 gt_masks = [t["masks"] for t in targets]
+                for gt_mask in gt_masks:
+                    only_binary_values = ~((unique(gt_mask) != 0) & (unique(gt_mask) != 1)).any()
+                    _assert(has_non_binary_value, 'a target["mask"] contains a non-binary value.')
                 gt_labels = [t["labels"] for t in targets]
                 rcnn_loss_mask = maskrcnn_loss(mask_logits, mask_proposals, gt_masks, gt_labels, pos_matched_idxs)
                 loss_mask = {"loss_mask": rcnn_loss_mask}
